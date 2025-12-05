@@ -1,0 +1,13 @@
+/* ScrollReveal component styles */
+.scroll-reveal {
+  margin: 0;
+}
+
+.scroll-reveal-text {
+  font-family: var(--font-display);
+  line-height: 1.3;
+}
+
+.word {
+  display: inline-block;
+}
