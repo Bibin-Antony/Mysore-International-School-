@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import StaggeredMenu from '@/components/StaggeredMenu'
 
@@ -21,6 +21,14 @@ interface Activity {
 
 export default function AdminDashboard() {
   const router = useRouter()
+  const [stats, setStats] = useState<DashboardStats>({
+    totalEnquiries: 0,
+    newEnquiries: 0,
+    totalEvents: 0,
+    publishedEvents: 0
+  })
+  const [recentActivities, setRecentActivities] = useState<Activity[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   const menuItems = [
     { label: 'Dashboard', ariaLabel: 'Go to dashboard', link: '/admin/dashboard' },
@@ -29,55 +37,172 @@ export default function AdminDashboard() {
     { label: 'News & Events', ariaLabel: 'Manage news and events', link: '/admin/news-events' }
   ]
 
-  const stats = [
+  // Fetch dashboard data
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        if (!token) {
+          router.push('/admin-login')
+          return
+        }
+
+        setIsLoading(true)
+
+        // Fetch stats from multiple APIs
+        const [enquiriesRes, eventsRes, newsEventsRes] = await Promise.all([
+          fetch('/api/inquiries', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('/api/events', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('/api/news-events', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        ])
+        
+
+        if (enquiriesRes.status === 401) {
+          localStorage.removeItem('token')
+          router.push('/admin-login')
+          return
+        }
+
+        // Process Enquiries
+        const enquiriesData = await enquiriesRes.json()
+        const totalEnquiries = enquiriesData.success ? enquiriesData.data.length : 0
+        console.log(enquiriesData)
+        // Calculate new enquiries (last 7 days)
+        const sevenDaysAgo = new Date()
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+        
+        const newEnquiries = enquiriesData.success 
+          ? enquiriesData.data.filter((e: any) => new Date(e.createdAt) >= sevenDaysAgo).length 
+          : 0
+
+        // Process Events
+        const eventsData = await eventsRes.json()
+        const totalEvents = eventsData.success ? eventsData.data.length : 0
+        console.log(eventsData)
+        // Process News & Events
+        const newsEventsData = await newsEventsRes.json()
+        const publishedEvents = newsEventsData.success 
+          ? newsEventsData.data.filter((item: any) => item.status === 'published').length 
+          : 0
+        console.log(newsEventsData)
+        setStats({
+          totalEnquiries,
+          newEnquiries,
+          totalEvents,
+          publishedEvents
+        })
+
+        // Build recent activities from all sources
+        const activities: Activity[] = []
+
+        // Add recent enquiries
+if (enquiriesData.success && enquiriesData.data && enquiriesData.data.length > 0) {
+  enquiriesData.data.slice(0, 3).forEach((enquiry: any) => {
+    // Safely extract student name and grade with fallbacks
+    const studentName = enquiry.studentName || enquiry.name || 'Unknown Student'
+    const grade = enquiry.grade || enquiry.class || enquiry.category || 'Not Specified'
+    
+    activities.push({
+      _id: enquiry._id,
+      type: 'inquiry',
+      title: 'New Admission Enquiry',
+      description: `${studentName} - ${grade}`,
+      createdAt: enquiry.createdAt
+    })
+  })
+}
+
+
+        // Add recent events
+        if (eventsData.success) {
+          eventsData.data.slice(0, 2).forEach((event: any) => {
+            activities.push({
+              _id: event._id,
+              type: 'event',
+              title: 'Event Gallery Updated',
+              description: event.title,
+              createdAt: event.createdAt
+            })
+          })
+        }
+
+        // Add recent news & events
+        if (newsEventsData.success) {
+          newsEventsData.data.slice(0, 2).forEach((item: any) => {
+            activities.push({
+              _id: item._id,
+              type: 'news',
+              title: item.type === 'news' ? 'New Article Published' : 'New Event Created',
+              description: item.title,
+              createdAt: item.createdAt
+            })
+          })
+        }
+
+        // Sort by date and take top 5
+        activities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        setRecentActivities(activities.slice(0, 5))
+
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDashboardData()
+  }, [router])
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+    
+    if (diffInSeconds < 60) return 'Just now'
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`
+    return `${Math.floor(diffInSeconds / 604800)} weeks ago`
+  }
+
+  const displayStats = [
     {
       title: 'Total Enquiries',
-      value: '3',
-      change: '+2 this week',
-      positive: true
-    },
-    {
-      title: 'Active Enquiries',
-      value: '2',
-      change: 'New: 1',
+      value: stats.totalEnquiries.toString(),
+      change: `+${stats.newEnquiries} this week`,
       positive: true
     },
     
     {
-      title: 'Total Events',
-      value: '4',
-      change: 'Published: 4',
+      title: 'Gallery Events',
+      value: stats.totalEvents.toString(),
+      change: 'Total gallery items',
       positive: true
     },
     {
-      title: 'System Status',
-      value: 'Online',
+      title: 'News & Events',
+      value: stats.publishedEvents.toString(),
+      change: 'Published items',
       positive: true
     }
   ]
 
-  const recentActivities = [
-    {
-      title: 'New admission inquiry',
-      description: 'Raj Kumar applied for Grade 5 admission',
-      time: '2 days ago'
-    },
-    {
-      title: 'New admission inquiry',
-      description: 'Priya Sharma interested in Grade 3',
-      time: '3 days ago'
-    },
-    {
-      title: 'Event gallery updated',
-      description: 'Chocolate Alien Day event published',
-      time: '1 week ago'
-    },
-    {
-      title: 'Event gallery updated',
-      description: 'Fathers Day Celebration event published',
-      time: '1 week ago'
-    }
-  ]
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <div className="text-primary text-xl font-display">Loading dashboard...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -181,7 +306,7 @@ export default function AdminDashboard() {
             </button>
 
             <button 
-              onClick={() => router.push('/admin/analytics')}
+              onClick={() => router.push('/admin/news-events')}
               className="border-2 border-primary p-6 hover:bg-primary hover:text-white transition-all duration-300 group text-left"
             >
               <div className="font-display text-2xl font-semibold text-primary group-hover:text-white mb-2">
@@ -234,24 +359,7 @@ export default function AdminDashboard() {
               <div className="p-6 text-center text-gray-500">
                 No recent activities
               </div>
-            ))}
-          </div>
-        </section>
-
-        {/* System Status */}
-        <section className="mb-8">
-          <div className="bg-secondary border border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-display text-xl font-semibold text-primary mb-2">
-                  System Status
-                </h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="font-body text-sm text-gray-600">Online</span>
-              </div>
-            </div>
+            )}
           </div>
         </section>
       </div>

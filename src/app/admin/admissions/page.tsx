@@ -5,19 +5,29 @@ import { useRouter } from 'next/navigation'
 import StaggeredMenu from '@/components/StaggeredMenu'
 
 interface Enquiry {
-  id: number
+  _id: string
   studentName: string
   parentName: string
   phone: string
-  email: string
+  email?: string
   occupation: string
   category: string
-  message: string
+  message?: string
   remarks: string
-  date: string
-  time: string
   status: 'New' | 'Contacted' | 'Not Responding' | 'Follow Up' | 'Enrolled' | 'Rejected'
   source: string
+  createdAt: string
+  updatedAt: string
+}
+
+interface InquiryStats {
+  all: number
+  new: number
+  contacted: number
+  notResponding: number
+  followUp: number
+  enrolled: number
+  rejected: number
 }
 
 export default function AdminAdmissionsPage() {
@@ -30,53 +40,19 @@ export default function AdminAdmissionsPage() {
   const [selectedEnquiry, setSelectedEnquiry] = useState<Enquiry | null>(null)
   const [remarks, setRemarks] = useState('')
   const [editFormData, setEditFormData] = useState<Enquiry | null>(null)
-  const [enquiries, setEnquiries] = useState<Enquiry[]>([
-    {
-      id: 1,
-      studentName: 'Raj Kumar',
-      parentName: 'Suresh Kumar',
-      phone: '91086 94484',
-      email: 'suresh@example.com',
-      occupation: 'Business',
-      category: 'Admission',
-      message: 'Interested in admission for Grade 5',
-      remarks: 'No remarks',
-      date: '04/12/2025',
-      time: '05:24 PM',
-      status: 'New',
-      source: 'Website'
-    },
-    {
-      id: 2,
-      studentName: 'Priya Sharma',
-      parentName: 'Amit Sharma',
-      phone: '98765 43210',
-      email: 'amit@example.com',
-      occupation: 'Engineer',
-      category: 'Admission',
-      message: 'Looking for Grade 3 admission',
-      remarks: 'Called back',
-      date: '03/12/2025',
-      time: '02:15 PM',
-      status: 'Contacted',
-      source: 'Facebook'
-    },
-    {
-      id: 3,
-      studentName: 'Arjun Patel',
-      parentName: 'Neha Patel',
-      phone: '91234 56789',
-      email: 'neha@example.com',
-      occupation: 'Doctor',
-      category: 'Visit',
-      message: 'Want to schedule a campus visit',
-      remarks: 'No remarks',
-      date: '02/12/2025',
-      time: '10:30 AM',
-      status: 'New',
-      source: 'Instagram'
-    },
-  ])
+  const [enquiries, setEnquiries] = useState<Enquiry[]>([])
+  const [stats, setStats] = useState<InquiryStats>({
+    all: 0,
+    new: 0,
+    contacted: 0,
+    notResponding: 0,
+    followUp: 0,
+    enrolled: 0,
+    rejected: 0
+  })
+  const [totalPages, setTotalPages] = useState(1)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isUpdating, setIsUpdating] = useState(false)
 
   const menuItems = [
     { label: 'Dashboard', ariaLabel: 'Go to dashboard', link: '/admin/dashboard' },
@@ -95,35 +71,198 @@ export default function AdminAdmissionsPage() {
     { label: 'Rejected', key: 'rejected', color: 'bg-red-100 text-red-700' }
   ]
 
-  const totalPages = Math.ceil(enquiries.length / 15)
+  // Check authentication
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      router.push('/admin-login')
+    }
+  }, [router])
 
-  const handleStatusChange = (enquiryId: number, newStatus: string) => {
-    console.log(`Changing status for ${enquiryId} to ${newStatus}`)
-    setEnquiries(enquiries.map(enq => 
-      enq.id === enquiryId ? { ...enq, status: newStatus as any } : enq
-    ))
-    alert(`Status changed to: ${newStatus}`)
-  }
+  // Fetch inquiries from API
+  const fetchInquiries = async () => {
+    setIsLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        router.push('/admin-login')
+        return
+      }
 
-  const handleDelete = (enquiryId: number) => {
-    if (confirm('Are you sure you want to delete this enquiry?')) {
-      console.log(`Deleting enquiry ${enquiryId}`)
-      setEnquiries(enquiries.filter(enq => enq.id !== enquiryId))
-      alert('Enquiry deleted successfully')
+      const params = new URLSearchParams({
+        status: selectedStatus,
+        sort: sortOrder,
+        page: currentPage.toString(),
+        limit: '15'
+      })
+
+      const response = await fetch(`/api/inquiries?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      })
+
+      if (response.status === 401) {
+        localStorage.removeItem('token')
+        router.push('/admin-login')
+        return
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        setEnquiries(data.data || [])
+        setStats(data.stats || {
+          all: 0,
+          new: 0,
+          contacted: 0,
+          notResponding: 0,
+          followUp: 0,
+          enrolled: 0,
+          rejected: 0
+        })
+        setTotalPages(data.pagination?.totalPages || 1)
+      } else {
+        console.error('Failed to fetch inquiries:', data.message)
+      }
+    } catch (error) {
+      console.error('Error fetching inquiries:', error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleRemarksSubmit = () => {
-    if (selectedEnquiry) {
-      console.log(`Saving remarks for enquiry ${selectedEnquiry.id}:`, remarks)
-      setEnquiries(enquiries.map(enq => 
-        enq.id === selectedEnquiry.id ? { ...enq, remarks: remarks } : enq
-      ))
-      alert('Remarks saved successfully')
+  useEffect(() => {
+    fetchInquiries()
+  }, [selectedStatus, sortOrder, currentPage])
+
+  const handleStatusChange = async (enquiryId: string, newStatus: string) => {
+    console.log('🎯 [STATUS] Changing status:', enquiryId, 'to', newStatus)
+    setIsUpdating(true)
+    
+    try {
+      const token = localStorage.getItem('token')
+      
+      if (!token) {
+        alert('Please login again')
+        router.push('/admin-login')
+        return
+      }
+
+      const response = await fetch(`/api/inquiries/${enquiryId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ status: newStatus })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        console.log('✅ [STATUS] Success!')
+        await fetchInquiries()
+      } else {
+        console.error('❌ [STATUS] Failed:', data.message)
+        alert('Failed to update status: ' + data.message)
+      }
+    } catch (error: any) {
+      console.error('❌ [STATUS] Error:', error)
+      alert('Error updating status: ' + error.message)
+    } finally {
+      setIsUpdating(false)
     }
-    setShowRemarksModal(false)
-    setRemarks('')
-    setSelectedEnquiry(null)
+  }
+
+  const handleDelete = async (enquiryId: string) => {
+    if (!confirm('Are you sure you want to delete this enquiry?')) {
+      return
+    }
+
+    console.log('🗑️ [DELETE] Deleting:', enquiryId)
+
+    try {
+      const token = localStorage.getItem('token')
+      
+      if (!token) {
+        alert('Please login again')
+        router.push('/admin-login')
+        return
+      }
+
+      const response = await fetch(`/api/inquiries/${enquiryId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        console.log('✅ [DELETE] Success!')
+        await fetchInquiries()
+        alert('Enquiry deleted successfully')
+      } else {
+        console.error('❌ [DELETE] Failed:', data.message)
+        alert('Failed to delete enquiry: ' + data.message)
+      }
+    } catch (error: any) {
+      console.error('❌ [DELETE] Error:', error)
+      alert('Error deleting enquiry: ' + error.message)
+    }
+  }
+
+  const handleRemarksSubmit = async () => {
+    if (!selectedEnquiry) return
+
+    console.log('📝 [REMARKS] Saving for:', selectedEnquiry._id)
+    setIsUpdating(true)
+    
+    try {
+      const token = localStorage.getItem('token')
+      
+      if (!token) {
+        alert('Please login again')
+        router.push('/admin-login')
+        return
+      }
+
+      const response = await fetch(`/api/inquiries/${selectedEnquiry._id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ remarks })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        console.log('✅ [REMARKS] Success!')
+        setShowRemarksModal(false)
+        setRemarks('')
+        setSelectedEnquiry(null)
+        await fetchInquiries()
+        alert('Remarks saved successfully')
+      } else {
+        console.error('❌ [REMARKS] Failed:', data.message)
+        alert('Failed to update remarks: ' + data.message)
+      }
+    } catch (error: any) {
+      console.error('❌ [REMARKS] Error:', error)
+      alert('Error updating remarks: ' + error.message)
+    } finally {
+      setIsUpdating(false)
+    }
   }
 
   const handleEditClick = (enquiry: Enquiry) => {
@@ -131,15 +270,58 @@ export default function AdminAdmissionsPage() {
     setShowEditModal(true)
   }
 
-  const handleEditSubmit = () => {
-    if (editFormData) {
-      console.log('Saving edited enquiry:', editFormData)
-      setEnquiries(enquiries.map(enq => 
-        enq.id === editFormData.id ? editFormData : enq
-      ))
-      alert('Enquiry updated successfully')
-      setShowEditModal(false)
-      setEditFormData(null)
+  const handleEditSubmit = async () => {
+    if (!editFormData) return
+
+    console.log('✏️ [EDIT] Updating:', editFormData._id)
+    setIsUpdating(true)
+
+    try {
+      const token = localStorage.getItem('token')
+      
+      if (!token) {
+        alert('Please login again')
+        router.push('/admin-login')
+        return
+      }
+
+      const response = await fetch(`/api/inquiries/${editFormData._id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          studentName: editFormData.studentName,
+          parentName: editFormData.parentName,
+          email: editFormData.email,
+          phone: editFormData.phone,
+          occupation: editFormData.occupation,
+          category: editFormData.category,
+          status: editFormData.status,
+          message: editFormData.message,
+          remarks: editFormData.remarks
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        console.log('✅ [EDIT] Success!')
+        setShowEditModal(false)
+        setEditFormData(null)
+        await fetchInquiries()
+        alert('Enquiry updated successfully')
+      } else {
+        console.error('❌ [EDIT] Failed:', data.message)
+        alert('Failed to update enquiry: ' + data.message)
+      }
+    } catch (error: any) {
+      console.error('❌ [EDIT] Error:', error)
+      alert('Error updating enquiry: ' + error.message)
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -176,18 +358,6 @@ export default function AdminAdmissionsPage() {
     )
   }
 
-  const filteredEnquiries = selectedStatus === 'All' 
-    ? enquiries 
-    : enquiries.filter(enq => enq.status === selectedStatus)
-
-  const sortedEnquiries = [...filteredEnquiries].sort((a, b) => {
-    if (sortOrder === 'newest') {
-      return new Date(b.date).getTime() - new Date(a.date).getTime()
-    } else {
-      return new Date(a.date).getTime() - new Date(b.date).getTime()
-    }
-  })
-
   return (
     <div className="min-h-screen bg-white">
       <StaggeredMenu
@@ -210,7 +380,7 @@ export default function AdminAdmissionsPage() {
             Admission Enquiries
           </h1>
           <p className="font-body text-xl text-gray-600">
-            {filteredEnquiries.length} enquiries
+            {stats.all} total enquiries
           </p>
         </header>
 
@@ -220,7 +390,10 @@ export default function AdminAdmissionsPage() {
             {statusOptions.map((status) => (
               <button
                 key={status.label}
-                onClick={() => setSelectedStatus(status.label)}
+                onClick={() => {
+                  setSelectedStatus(status.label)
+                  setCurrentPage(1)
+                }}
                 className={`p-4 border-2 transition-all duration-300 cursor-pointer ${
                   selectedStatus === status.label 
                     ? 'border-primary bg-primary/5' 
@@ -247,7 +420,10 @@ export default function AdminAdmissionsPage() {
             <span className="font-body text-sm text-gray-600">Sort:</span>
             <select
               value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
+              onChange={(e) => {
+                setSortOrder(e.target.value)
+                setCurrentPage(1)
+              }}
               className="font-body px-4 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
             >
               <option value="newest">Newest first</option>
@@ -272,67 +448,67 @@ export default function AdminAdmissionsPage() {
         )}
 
         {/* Data Table */}
-        <div className="overflow-x-auto border border-gray-200">
-          <table className="w-full">
-            <thead className="bg-secondary">
-              <tr>
-                <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Student Info</th>
-                <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Parent Details</th>
-                <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Contact</th>
-                <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Category</th>
-                <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Message</th>
-                <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Remarks</th>
-                <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Date</th>
-                <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Status</th>
-                <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedEnquiries.length === 0 ? (
+        {!isLoading && enquiries.length > 0 && (
+          <div className="overflow-x-auto border border-gray-200">
+            <table className="w-full">
+              <thead className="bg-secondary">
                 <tr>
-                  <td colSpan={9} className="p-8 text-center font-body text-gray-500">
-                    No enquiries found for this filter
-                  </td>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Student Info</th>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Parent Details</th>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Contact</th>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Category</th>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Message</th>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Remarks</th>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Date</th>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Status</th>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Actions</th>
                 </tr>
-              ) : (
-                sortedEnquiries.map((enquiry) => (
-                  <tr key={enquiry.id} className="hover:bg-secondary/30 transition-colors border-b border-gray-200 last:border-b-0">
+              </thead>
+              <tbody>
+                {enquiries.map((enquiry) => (
+                  <tr key={enquiry._id} className="hover:bg-secondary/30 transition-colors border-b border-gray-200 last:border-b-0">
                     <td className="p-4 font-body text-sm text-gray-700">
-                      {enquiry.studentName || '.'}
+                      {enquiry.studentName || '-'}
                     </td>
                     <td className="p-4">
-                      <div className="font-body text-sm text-gray-700">{enquiry.parentName || '.'}</div>
-                      <div className="font-body text-xs text-gray-500">{enquiry.occupation || '.'}</div>
+                      <div className="font-body text-sm text-gray-700">{enquiry.parentName || '-'}</div>
+                      <div className="font-body text-xs text-gray-500">{enquiry.occupation || '-'}</div>
                     </td>
                     <td className="p-4">
                       <div className="font-body text-sm text-gray-700">{enquiry.phone}</div>
-                      <div className="font-body text-xs text-gray-500">{enquiry.email || '.'}</div>
+                      <div className="font-body text-xs text-gray-500">{enquiry.email || '-'}</div>
                     </td>
-                    <td className="p-4 font-body text-sm text-gray-700">{enquiry.category}</td>
+                    <td className="p-4 font-body text-sm text-gray-700 capitalize">{enquiry.category}</td>
                     <td className="p-4 font-body text-sm text-gray-700 max-w-xs truncate">
-                      {enquiry.message || '.'}
+                      {enquiry.message || '-'}
                     </td>
                     <td className="p-4">
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation()
                           setSelectedEnquiry(enquiry)
                           setRemarks(enquiry.remarks)
                           setShowRemarksModal(true)
                         }}
                         className="font-body text-sm text-primary hover:text-[#6B0F6B] underline cursor-pointer"
                       >
-                        {enquiry.remarks}
+                        {enquiry.remarks || 'Add remarks'}
                       </button>
                     </td>
                     <td className="p-4">
-                      <div className="font-body text-sm text-gray-700">{enquiry.date}</div>
-                      <div className="font-body text-xs text-gray-500">{enquiry.time}</div>
+                      <div className="font-body text-sm text-gray-700">{formatDate(enquiry.createdAt)}</div>
+                      <div className="font-body text-xs text-gray-500">{formatTime(enquiry.createdAt)}</div>
                     </td>
                     <td className="p-4">
                       <select
                         value={enquiry.status}
-                        onChange={(e) => handleStatusChange(enquiry.id, e.target.value)}
-                        className={`font-body text-xs font-semibold px-3 py-1.5 rounded ${getStatusBadgeColor(enquiry.status)} border-0 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer`}
+                        onChange={(e) => {
+                          e.stopPropagation()
+                          handleStatusChange(enquiry._id, e.target.value)
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        disabled={isUpdating}
+                        className={`font-body text-xs font-semibold px-3 py-1.5 rounded ${getStatusBadgeColor(enquiry.status)} border-0 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-50`}
                       >
                         <option value="New">New</option>
                         <option value="Contacted">Contacted</option>
@@ -345,13 +521,19 @@ export default function AdminAdmissionsPage() {
                     <td className="p-4">
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleEditClick(enquiry)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditClick(enquiry)
+                          }}
                           className="font-body text-sm text-primary hover:text-[#6B0F6B] transition-colors cursor-pointer"
                         >
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDelete(enquiry.id)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(enquiry._id)
+                          }}
                           className="font-body text-sm text-red-600 hover:text-red-700 transition-colors cursor-pointer"
                         >
                           Delete
@@ -359,32 +541,34 @@ export default function AdminAdmissionsPage() {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination */}
-        <div className="flex justify-between items-center mt-6">
-          <button
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            className="font-body px-6 py-2 border-2 border-gray-300 text-gray-700 hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-          >
-            Prev
-          </button>
-          <span className="font-body text-gray-600">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
-            className="font-body px-6 py-2 border-2 border-gray-300 text-gray-700 hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-          >
-            Next
-          </button>
-        </div>
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center mt-6">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="font-body px-6 py-2 border-2 border-gray-300 text-gray-700 hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            >
+              Prev
+            </button>
+            <span className="font-body text-gray-600">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="font-body px-6 py-2 border-2 border-gray-300 text-gray-700 hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Remarks Modal */}
@@ -419,15 +603,17 @@ export default function AdminAdmissionsPage() {
                     setRemarks('')
                     setSelectedEnquiry(null)
                   }}
-                  className="flex-1 font-body font-semibold px-6 py-3 border-2 border-gray-300 text-gray-700 hover:border-gray-400 transition-colors cursor-pointer"
+                  disabled={isUpdating}
+                  className="flex-1 font-body font-semibold px-6 py-3 border-2 border-gray-300 text-gray-700 hover:border-gray-400 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleRemarksSubmit}
-                  className="flex-1 font-body font-semibold px-6 py-3 bg-primary text-white hover:bg-[#6B0F6B] transition-colors cursor-pointer"
+                  disabled={isUpdating}
+                  className="flex-1 font-body font-semibold px-6 py-3 bg-primary text-white hover:bg-[#6B0F6B] transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {isUpdating ? 'Saving...' : 'Save Changes'}
+                  {isUpdating ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </div>
@@ -462,7 +648,8 @@ export default function AdminAdmissionsPage() {
                     type="text"
                     value={editFormData.studentName}
                     onChange={(e) => setEditFormData({ ...editFormData, studentName: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    disabled={isUpdating}
+                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50"
                   />
                 </div>
 
@@ -475,7 +662,8 @@ export default function AdminAdmissionsPage() {
                     type="text"
                     value={editFormData.parentName}
                     onChange={(e) => setEditFormData({ ...editFormData, parentName: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    disabled={isUpdating}
+                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50"
                   />
                 </div>
 
@@ -486,9 +674,10 @@ export default function AdminAdmissionsPage() {
                   </label>
                   <input
                     type="email"
-                    value={editFormData.email}
+                    value={editFormData.email || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    disabled={isUpdating}
+                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50"
                   />
                 </div>
 
@@ -501,7 +690,8 @@ export default function AdminAdmissionsPage() {
                     type="tel"
                     value={editFormData.phone}
                     onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    disabled={isUpdating}
+                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50"
                   />
                 </div>
 
@@ -514,7 +704,8 @@ export default function AdminAdmissionsPage() {
                     type="text"
                     value={editFormData.occupation}
                     onChange={(e) => setEditFormData({ ...editFormData, occupation: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    disabled={isUpdating}
+                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50"
                   />
                 </div>
 
@@ -526,7 +717,8 @@ export default function AdminAdmissionsPage() {
                   <select
                     value={editFormData.category}
                     onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    disabled={isUpdating}
+                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50"
                   >
                     <option value="Admission">Admission</option>
                     <option value="Inquiry">Inquiry</option>
@@ -543,7 +735,8 @@ export default function AdminAdmissionsPage() {
                   <select
                     value={editFormData.status}
                     onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as any })}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    disabled={isUpdating}
+                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50"
                   >
                     <option value="New">New</option>
                     <option value="Contacted">Contacted</option>
@@ -560,10 +753,11 @@ export default function AdminAdmissionsPage() {
                     Message
                   </label>
                   <textarea
-                    value={editFormData.message}
+                    value={editFormData.message || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, message: e.target.value })}
+                    disabled={isUpdating}
                     rows={3}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all resize-none"
+                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all resize-none disabled:opacity-50"
                   />
                 </div>
 
@@ -575,8 +769,9 @@ export default function AdminAdmissionsPage() {
                   <textarea
                     value={editFormData.remarks}
                     onChange={(e) => setEditFormData({ ...editFormData, remarks: e.target.value })}
+                    disabled={isUpdating}
                     rows={3}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all resize-none"
+                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all resize-none disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -587,15 +782,17 @@ export default function AdminAdmissionsPage() {
                     setShowEditModal(false)
                     setEditFormData(null)
                   }}
-                  className="flex-1 font-body font-semibold px-6 py-3 border-2 border-gray-300 text-gray-700 hover:border-gray-400 transition-colors cursor-pointer"
+                  disabled={isUpdating}
+                  className="flex-1 font-body font-semibold px-6 py-3 border-2 border-gray-300 text-gray-700 hover:border-gray-400 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleEditSubmit}
-                  className="flex-1 font-body font-semibold px-6 py-3 bg-primary text-white hover:bg-[#6B0F6B] transition-colors cursor-pointer"
+                  disabled={isUpdating}
+                  className="flex-1 font-body font-semibold px-6 py-3 bg-primary text-white hover:bg-[#6B0F6B] transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  Save Changes
+                  {isUpdating ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>

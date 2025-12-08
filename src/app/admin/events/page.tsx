@@ -10,7 +10,13 @@ type EventCategory = 'Cultural' | 'Sports' | 'Academic' | 'National' | 'Festival
 export default function AdminEventGalleryPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [editingEventId, setEditingEventId] = useState<number | null>(null)
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<string>('')
+  const [editingEventId, setEditingEventId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [events, setEvents] = useState<IEvent[]>([])
+  
   const [formData, setFormData] = useState({
     title: '',
     date: '',
@@ -28,44 +34,30 @@ export default function AdminEventGalleryPage() {
     { label: 'News & Events', ariaLabel: 'Manage news and events', link: '/admin/news-events' } // CHANGED HERE
   ]
 
-  const [events, setEvents] = useState([
-    {
-      id: 1,
-      title: 'BEO School visit',
-      description: 'BEO School Visit',
-      date: 'May 16, 2025',
-      category: 'Academic',
-      photoCount: 4,
-      driveLink: 'https://drive.google.com/...'
-    },
-    {
-      id: 2,
-      title: 'Color Carnival',
-      description: 'Color carnival celebration',
-      date: 'September 16, 2025',
-      category: 'Festival',
-      photoCount: 5,
-      driveLink: 'https://drive.google.com/...'
-    },
-    {
-      id: 3,
-      title: 'Chocolate Alien Day',
-      description: 'Chocolate Alien Day',
-      date: 'June 17, 2025',
-      category: 'Cultural',
-      photoCount: 4,
-      driveLink: 'https://drive.google.com/...'
-    },
-    {
-      id: 4,
-      title: 'Fathers Day',
-      description: 'Fathers Day Celebration',
-      date: 'June 15, 2025',
-      category: 'Cultural',
-      photoCount: 5,
-      driveLink: 'https://drive.google.com/...'
+  const categories: EventCategory[] = ['Cultural', 'Sports', 'Academic', 'National', 'Festival', 'Competition']
+
+  useEffect(() => {
+    fetchEvents()
+  }, [])
+
+  const fetchEvents = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch('/api/events')
+      const data = await response.json()
+      
+      if (data.success) {
+        setEvents(data.data)
+      } else {
+        alert('Failed to fetch events')
+      }
+    } catch (error) {
+      console.error('Fetch events error:', error)
+      alert('Failed to fetch events')
+    } finally {
+      setIsLoading(false)
     }
-  ])
+  }
 
   const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -167,58 +159,80 @@ export default function AdminEventGalleryPage() {
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('Create event:', formData)
-    alert('Event created successfully! (Backend integration pending)')
-    setShowCreateModal(false)
-    // Reset form
-    setFormData({
-      title: '',
-      date: '',
-      category: 'Cultural',
-      description: '',
-      thumbnail: null,
-      galleryImages: Array(6).fill(null),
-      driveLink: ''
-    })
+
+    if (!editingEventId) return
+
+    try {
+      setIsSubmitting(true)
+
+      const form = new FormData()
+      form.append('title', formData.title)
+      form.append('date', formData.date)
+      form.append('category', formData.category)
+      form.append('description', formData.description)
+      form.append('driveLink', formData.driveLink)
+      
+      if (formData.thumbnail) {
+        form.append('thumbnail', formData.thumbnail)
+      }
+      
+      if (formData.galleryImages.length > 0) {
+        formData.galleryImages.forEach((file, index) => {
+          form.append(`galleryImage${index}`, file)
+        })
+      }
+
+      const response = await fetch(`/api/events/${editingEventId}`, {
+        method: 'PUT',
+        body: form,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('Event updated successfully!')
+        setShowEditModal(false)
+        setEditingEventId(null)
+        fetchEvents()
+        setFormData({
+          title: '',
+          date: '',
+          category: 'Cultural',
+          description: '',
+          thumbnail: null,
+          galleryImages: [],
+          driveLink: ''
+        })
+      } else {
+        alert(data.message || 'Failed to update event')
+      }
+    } catch (error) {
+      console.error('Update event error:', error)
+      alert('Failed to update event')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleEditClick = (event: typeof events[0]) => {
-    setEditingEventId(event.id)
-    setFormData({
-      title: event.title,
-      date: event.date,
-      category: event.category,
-      description: event.description,
-      thumbnail: null,
-      galleryImages: Array(6).fill(null),
-      driveLink: event.driveLink
-    })
-    setShowEditModal(true)
-  }
+  const handleDelete = async (eventId: string) => {
+    if (!confirm('Are you sure you want to delete this event?')) return
 
-  const handleEditSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    console.log('Edit event:', editingEventId, formData)
-    alert('Event updated successfully! (Backend integration pending)')
-    setShowEditModal(false)
-    setEditingEventId(null)
-    // Reset form
-    setFormData({
-      title: '',
-      date: '',
-      category: 'Cultural',
-      description: '',
-      thumbnail: null,
-      galleryImages: Array(6).fill(null),
-      driveLink: ''
-    })
-  }
+    try {
+      const response = await fetch(`/api/events/${eventId}`, {
+        method: 'DELETE',
+      })
 
-  const handleDelete = (eventId: number) => {
-    if (confirm('Are you sure you want to delete this event?')) {
-      console.log('Delete event:', eventId)
-      setEvents(events.filter(e => e.id !== eventId))
-      alert('Event deleted successfully!')
+      const data = await response.json()
+
+      if (data.success) {
+        alert('Event deleted successfully!')
+        fetchEvents()
+      } else {
+        alert(data.message || 'Failed to delete event')
+      }
+    } catch (error) {
+      console.error('Delete event error:', error)
+      alert('Failed to delete event')
     }
   }
 
@@ -227,17 +241,19 @@ export default function AdminEventGalleryPage() {
       <StaggeredMenu
         position="right"
         items={menuItems}
-        displayItemNumbering={true}
+        displayItemNumbering={false}
         menuButtonColor="#580B57"
-        openMenuButtonColor="#fff"
+        openMenuButtonColor="#580B57"
         changeMenuColorOnOpen={true}
         colors={['#D1A3FF', '#580B57']}
         accentColor="#580B57"
+        logoUrl="/fulllogo.svg"
+        isFixed={true}
+        displaySocials={false}
+        showLogout={true}
       />
 
-      {/* Main Content */}
-      <div className="container mx-auto  px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
-        {/* Header */}
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
         <header className="mb-12 mt-25">
           <h1 className="font-display text-5xl md:text-6xl font-bold text-primary mb-4 tracking-tight">
             Event Gallery Management
@@ -253,56 +269,128 @@ export default function AdminEventGalleryPage() {
           </button>
         </header>
 
-        {/* Events List */}
-        <section>
-          <div className="space-y-6">
-            {events.map((event) => (
-              <div 
-                key={event.id}
-                className="border border-gray-200 p-6 hover:border-primary transition-colors duration-300"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-3">
-                      <span className="font-body text-sm font-semibold text-primary uppercase tracking-widest">
-                        {event.category}
-                      </span>
-                      <span className="font-body text-sm text-gray-500">
-                        {event.photoCount} Photos
-                      </span>
-                    </div>
-                    <div className="font-body text-sm text-gray-500 mb-2">
-                      {event.date}
-                    </div>
-                    <h3 className="font-display text-2xl font-semibold text-primary mb-2">
-                      {event.title}
-                    </h3>
-                    <p className="font-body text-gray-600 mb-4">
-                      {event.description}
-                    </p>
-                    <a
-                      href={event.driveLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-body text-sm text-primary hover:text-[#6B0F6B] transition-colors"
-                    >
-                      View Full Album →
-                    </a>
-                  </div>
+        {isLoading && (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <p className="mt-4 text-gray-600">Loading events...</p>
+          </div>
+        )}
 
-                  <div className="flex gap-3 ml-6">
-                    <button 
-                      onClick={() => handleEditClick(event)}
-                      className="font-body px-6 py-2 border-2 border-primary text-primary hover:bg-primary hover:text-white transition-all duration-300"
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(event.id)}
-                      className="font-body px-6 py-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition-all duration-300"
-                    >
-                      Delete
-                    </button>
+        {!isLoading && (
+          <section>
+            {events.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 rounded-lg">
+                <p className="text-xl text-gray-600">No events found. Create your first event!</p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {events.map((event) => (
+                  <div 
+                    key={event._id}
+                    className="border border-gray-200 rounded-lg p-6 hover:border-primary transition-colors duration-300"
+                  >
+                    <div className="flex flex-col lg:flex-row gap-6">
+                      {/* Thumbnail */}
+                      <div className="lg:w-1/3">
+                        <div 
+                          className="relative aspect-[4/3] rounded-lg overflow-hidden cursor-pointer group"
+                          onClick={() => openImageModal(event.thumbnail.url)}
+                        >
+                          <Image
+                            src={event.thumbnail.url}
+                            alt={event.title}
+                            fill
+                            className="object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-center justify-center">
+                            <span className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-4xl">
+                              🔍
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Event Details */}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-4 mb-3">
+                          <span className="font-body text-sm font-semibold text-primary uppercase tracking-widest">
+                            {event.category}
+                          </span>
+                          <span className="font-body text-sm text-gray-500">
+                            {event.photoCount} Photos
+                          </span>
+                        </div>
+                        <div className="font-body text-sm text-gray-500 mb-2">
+                          {new Date(event.date).toLocaleDateString('en-US', { 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                          })}
+                        </div>
+                        <h3 className="font-display text-2xl font-semibold text-primary mb-2">
+                          {event.title}
+                        </h3>
+                        <p className="font-body text-gray-600 mb-4">
+                          {event.description}
+                        </p>
+
+                        {/* Gallery Images Preview */}
+                        <div className="mb-4">
+                          <p className="font-body text-sm font-semibold text-gray-700 mb-2">
+                            Gallery Images:
+                          </p>
+                          <div className="grid grid-cols-4 gap-2">
+                            {event.galleryImages.slice(0, 8).map((image, index) => (
+                              <div
+                                key={index}
+                                className="relative aspect-square rounded overflow-hidden cursor-pointer group"
+                                onClick={() => openImageModal(image.url)}
+                              >
+                                <Image
+                                  src={image.url}
+                                  alt={`${event.title} - ${index + 1}`}
+                                  fill
+                                  className="object-cover group-hover:scale-110 transition-transform duration-300"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300" />
+                              </div>
+                            ))}
+                            {event.galleryImages.length > 8 && (
+                              <div className="relative aspect-square rounded overflow-hidden bg-gray-100 flex items-center justify-center">
+                                <span className="font-body text-sm text-gray-600">
+                                  +{event.galleryImages.length - 8}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <a
+                          href={event.driveLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-body text-sm text-primary hover:text-[#6B0F6B] transition-colors inline-block"
+                        >
+                          View Full Album on Google Drive →
+                        </a>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3 mt-4">
+                          <button 
+                            onClick={() => handleEditClick(event)}
+                            className="font-body px-6 py-2 border-2 border-primary text-primary hover:bg-primary hover:text-white transition-all duration-300 rounded-lg"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(event._id)}
+                            className="font-body px-6 py-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition-all duration-300 rounded-lg"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -311,12 +399,37 @@ export default function AdminEventGalleryPage() {
         )}
       </div>
 
-      {/* Create Event Modal */}
+      {/* Image Modal */}
+      {showImageModal && (
+        <div 
+          className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4"
+          onClick={() => setShowImageModal(false)}
+        >
+          <div className="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
+            <button
+              onClick={() => setShowImageModal(false)}
+              className="absolute top-4 right-4 text-white text-4xl hover:text-gray-300 transition-colors z-10"
+            >
+              ×
+            </button>
+            <div className="relative w-full h-full">
+              <Image
+                src={selectedImage}
+                alt="Full size preview"
+                fill
+                className="object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Event Modal - (keeping the same as before) */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-8 overflow-y-auto flex-1">
-              {/* Modal Header */}
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreateModal(false)}>
+          <div className="bg-white w-full max-w-3xl max-h-[90vh] rounded-lg overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-8 overflow-y-auto flex-1 modal-scrollable">
               <div className="mb-8">
                 <h2 className="font-display text-4xl font-bold text-primary mb-2">
                   Create New Event
@@ -326,7 +439,6 @@ export default function AdminEventGalleryPage() {
                 </p>
               </div>
 
-              {/* Form */}
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <label className="block font-body text-sm font-medium text-gray-700 mb-2">
@@ -699,127 +811,6 @@ export default function AdminEventGalleryPage() {
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? 'Updating...' : 'Update Event'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Event Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-8 overflow-y-auto flex-1">
-              {/* Modal Header */}
-              <div className="mb-8">
-                <h2 className="font-display text-4xl font-bold text-primary mb-2">
-                  Edit Event
-                </h2>
-                <p className="font-body text-gray-600">
-                  Update the event details below
-                </p>
-              </div>
-
-              {/* Form */}
-              <form onSubmit={handleEditSubmit} className="space-y-6">
-                {/* Event Title */}
-                <div>
-                  <label className="block font-body text-sm font-medium text-gray-700 mb-2">
-                    Event Title *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                    placeholder="Enter event title"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  />
-                </div>
-
-                {/* Event Date */}
-                <div>
-                  <label className="block font-body text-sm font-medium text-gray-700 mb-2">
-                    Event Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  />
-                </div>
-
-                {/* Category */}
-                <div>
-                  <label className="block font-body text-sm font-medium text-gray-700 mb-2">
-                    Category *
-                  </label>
-                  <select
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block font-body text-sm font-medium text-gray-700 mb-2">
-                    Event Description *
-                  </label>
-                  <textarea
-                    required
-                    rows={3}
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
-                    placeholder="Enter event description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  />
-                </div>
-
-                {/* Google Drive Link */}
-                <div>
-                  <label className="block font-body text-sm font-medium text-gray-700 mb-2">
-                    Google Drive Album Link *
-                  </label>
-                  <input
-                    type="url"
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                    placeholder="Paste the shareable link to your Google Drive folder"
-                    value={formData.driveLink}
-                    onChange={(e) => setFormData({ ...formData, driveLink: e.target.value })}
-                  />
-                  <p className="font-body text-sm text-gray-500 mt-2">
-                    Paste the shareable link to your Google Drive folder containing all event photos
-                  </p>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-4 pt-6 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditModal(false)
-                      setEditingEventId(null)
-                    }}
-                    className="flex-1 font-body font-semibold px-6 py-3 border-2 border-gray-300 text-gray-700 hover:border-gray-400 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 font-body font-semibold px-6 py-3 bg-primary text-white hover:bg-[#6B0F6B] transition-colors"
-                  >
-                    Update Event
                   </button>
                 </div>
               </form>
