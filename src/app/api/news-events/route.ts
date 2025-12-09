@@ -3,13 +3,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import NewsEvent from "@/lib/models/NewsEvent";
-import { v2 as cloudinary } from "cloudinary";
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+import { uploadImage } from "@/lib/uploadToCloudinary";
 
 // GET all news/events
 export async function GET(request: NextRequest) {
@@ -76,24 +70,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const buffer = Buffer.from(await image.arrayBuffer());
-
-    const uploadResult: any = await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { folder: "mis/news-events" },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      ).end(buffer);
-    });
+    // ✅ Use the same upload method as Event Gallery
+    const uploadResult = await uploadImage(image, "news-events");
 
     const newItem = await NewsEvent.create({
       type,
       title,
       excerpt,
       fullContent,
-      imageUrl: uploadResult.secure_url,
+      imageUrl: uploadResult.url,
       date: new Date(date),
       time,
       location,
@@ -108,10 +93,10 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /news-events error:", error);
     return NextResponse.json(
-      { success: false, message: "Failed to create news/event" },
+      { success: false, message: error.message || "Failed to create news/event" },
       { status: 500 }
     );
   }

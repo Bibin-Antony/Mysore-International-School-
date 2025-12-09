@@ -3,13 +3,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import NewsEvent from "@/lib/models/NewsEvent";
-import { v2 as cloudinary } from "cloudinary";
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+import { uploadImage } from "@/lib/uploadToCloudinary";
 
 // GET one
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -75,20 +69,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       status,
     };
 
+    // ✅ Use the same upload method as Event Gallery
     if (image) {
-      const buffer = Buffer.from(await image.arrayBuffer());
-
-      const uploadResult: any = await new Promise((resolve, reject) => {
-        cloudinary.uploader.upload_stream(
-          { folder: "mis/news-events" },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        ).end(buffer);
-      });
-
-      updateData.imageUrl = uploadResult.secure_url;
+      const uploadResult = await uploadImage(image, "news-events");
+      updateData.imageUrl = uploadResult.url;
     }
 
     const updated = await NewsEvent.findByIdAndUpdate(params.id, updateData, {
@@ -108,10 +92,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       message: "Updated successfully",
       data: updated,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("PUT /news-events/[id] error:", error);
     return NextResponse.json(
-      { success: false, message: "Failed to update item" },
+      { success: false, message: error.message || "Failed to update item" },
       { status: 500 }
     );
   }
