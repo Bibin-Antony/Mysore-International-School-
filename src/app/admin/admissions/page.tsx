@@ -41,6 +41,11 @@ export default function AdminAdmissionsPage() {
   const [remarks, setRemarks] = useState('')
   const [editFormData, setEditFormData] = useState<Enquiry | null>(null)
   const [enquiries, setEnquiries] = useState<Enquiry[]>([])
+  
+  // Filter states
+  const [filterCategory, setFilterCategory] = useState<string>('all')
+  const [filterSource, setFilterSource] = useState<string>('all')
+  
   const [stats, setStats] = useState<InquiryStats>({
     all: 0,
     new: 0,
@@ -57,8 +62,8 @@ export default function AdminAdmissionsPage() {
   const menuItems = [
     { label: 'Dashboard', ariaLabel: 'Go to dashboard', link: '/admin/dashboard' },
     { label: 'Admissions', ariaLabel: 'Manage admissions', link: '/admin/admissions' },
-    { label: 'Event Gallery', ariaLabel: 'Manage events and gallery', link: '/admin/events' },    { label: 'News & Events', ariaLabel: 'Manage news and events', link: '/admin/news-events' } // CHANGED HERE
-
+    { label: 'Event Gallery', ariaLabel: 'Manage events and gallery', link: '/admin/events' },
+    { label: 'News & Events', ariaLabel: 'Manage news and events', link: '/admin/news-events' }
   ]
 
   const statusOptions = [
@@ -137,6 +142,26 @@ export default function AdminAdmissionsPage() {
   useEffect(() => {
     fetchInquiries()
   }, [selectedStatus, sortOrder, currentPage])
+
+  // Filter enquiries based on category and source
+  const filteredEnquiries = enquiries.filter(enquiry => {
+    // Category filter
+    if (filterCategory !== 'all' && enquiry.category.toLowerCase() !== filterCategory.toLowerCase()) {
+      return false
+    }
+
+    // Source filter
+    if (filterSource !== 'all' && enquiry.source.toLowerCase() !== filterSource.toLowerCase()) {
+      return false
+    }
+
+    return true
+  })
+
+  const handleResetFilters = () => {
+    setFilterCategory('all')
+    setFilterSource('all')
+  }
 
   const handleStatusChange = async (enquiryId: string, newStatus: string) => {
     console.log('🎯 [STATUS] Changing status:', enquiryId, 'to', newStatus)
@@ -359,7 +384,7 @@ export default function AdminAdmissionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white pb-12 md:pb-0">
       <StaggeredMenu
         position="right"
         items={menuItems}
@@ -372,21 +397,22 @@ export default function AdminAdmissionsPage() {
         logoUrl="/fulllogo.svg"
         isFixed={true}
         displaySocials={false}
+        showLogout={true}
       />
 
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
-        <header className="mb-12 md:mt-20">
-          <h1 className="font-display text-5xl md:text-6xl font-bold text-primary mb-4 tracking-tight">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl">
+        <header className="mb-8 sm:mb-12 mt-16 sm:mt-20">
+          <h1 className="font-display text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-primary mb-3 sm:mb-4 tracking-tight">
             Admission Enquiries
           </h1>
-          <p className="font-body text-xl text-gray-600">
+          <p className="font-body text-base sm:text-lg md:text-xl text-gray-600">
             {stats.all} total enquiries
           </p>
         </header>
 
         {/* Status Filters */}
-        <section className="mb-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <section className="mb-6 sm:mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4">
             {statusOptions.map((status) => (
               <button
                 key={status.label}
@@ -394,16 +420,16 @@ export default function AdminAdmissionsPage() {
                   setSelectedStatus(status.label)
                   setCurrentPage(1)
                 }}
-                className={`p-4 border-2 transition-all duration-300 cursor-pointer ${
+                className={`p-3 sm:p-4 border-2 transition-all duration-300 cursor-pointer rounded-lg ${
                   selectedStatus === status.label 
                     ? 'border-primary bg-primary/5' 
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
-                <div className="font-display text-3xl font-bold text-primary mb-2">
+                <div className="font-display text-2xl sm:text-3xl font-bold text-primary mb-1 sm:mb-2">
                   {stats[status.key as keyof InquiryStats]}
                 </div>
-                <div className="font-body text-sm text-gray-600">
+                <div className="font-body text-xs sm:text-sm text-gray-600">
                   {status.label}
                 </div>
               </button>
@@ -411,12 +437,72 @@ export default function AdminAdmissionsPage() {
           </div>
         </section>
 
+        {/* Additional Filters Section */}
+        <div className="mb-6 sm:mb-8 bg-gray-50 p-4 sm:p-6 rounded-lg">
+          <h2 className="font-display text-lg sm:text-xl font-semibold text-primary mb-4">
+            Filter Enquiries
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Category Filter */}
+            <div>
+              <label className="block font-body text-sm font-medium text-gray-700 mb-2">
+                Category
+              </label>
+              <select
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+              >
+                <option value="all">All Categories</option>
+                <option value="admission">Admission</option>
+                <option value="inquiry">Inquiry</option>
+                <option value="visit">Visit</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            {/* Source Filter */}
+            <div>
+              <label className="block font-body text-sm font-medium text-gray-700 mb-2">
+                Source
+              </label>
+              <select
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                value={filterSource}
+                onChange={(e) => setFilterSource(e.target.value)}
+              >
+                <option value="all">All Sources</option>
+                <option value="website">Website</option>
+                <option value="phone">Phone</option>
+                <option value="walk-in">Walk-in</option>
+                <option value="referral">Referral</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            {/* Reset Button */}
+            <div className="flex items-end">
+              <button
+                onClick={handleResetFilters}
+                className="w-full font-body text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3 border-2 border-gray-300 text-gray-700 hover:border-primary hover:text-primary transition-all duration-300 rounded-lg"
+              >
+                Reset Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Results Count */}
+          <div className="mt-4 font-body text-sm text-gray-600">
+            Showing {filteredEnquiries.length} of {enquiries.length} enquiries
+          </div>
+        </div>
+
         {/* Controls */}
-        <div className="flex justify-between items-center mb-6 pb-6 border-b border-gray-200">
-          <h2 className="font-display text-2xl font-semibold text-primary">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-6 border-b border-gray-200">
+          <h2 className="font-display text-xl sm:text-2xl font-semibold text-primary">
             {selectedStatus} Enquiries
           </h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
             <span className="font-body text-sm text-gray-600">Sort:</span>
             <select
               value={sortOrder}
@@ -424,7 +510,7 @@ export default function AdminAdmissionsPage() {
                 setSortOrder(e.target.value)
                 setCurrentPage(1)
               }}
-              className="font-body px-4 py-2 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+              className="flex-1 sm:flex-none font-body px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer text-sm sm:text-base"
             >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
@@ -441,15 +527,17 @@ export default function AdminAdmissionsPage() {
         )}
 
         {/* No Results */}
-        {!isLoading && enquiries.length === 0 && (
-          <div className="text-center py-12 border border-gray-200">
-            <p className="text-xl text-gray-600 font-body">No enquiries found</p>
+        {!isLoading && filteredEnquiries.length === 0 && (
+          <div className="text-center py-12 border border-gray-200 rounded-lg">
+            <p className="text-lg sm:text-xl text-gray-600 font-body">
+              {enquiries.length === 0 ? 'No enquiries found' : 'No enquiries match your filters'}
+            </p>
           </div>
         )}
 
         {/* Data Table */}
-        {!isLoading && enquiries.length > 0 && (
-          <div className="overflow-x-auto border border-gray-200">
+        {!isLoading && filteredEnquiries.length > 0 && (
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
             <table className="w-full">
               <thead className="bg-secondary">
                 <tr>
@@ -457,6 +545,7 @@ export default function AdminAdmissionsPage() {
                   <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Parent Details</th>
                   <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Contact</th>
                   <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Category</th>
+                  <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Source</th>
                   <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Message</th>
                   <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Remarks</th>
                   <th className="font-body text-sm font-semibold text-primary text-left p-4 border-b border-gray-200">Date</th>
@@ -465,7 +554,7 @@ export default function AdminAdmissionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {enquiries.map((enquiry) => (
+                {filteredEnquiries.map((enquiry) => (
                   <tr key={enquiry._id} className="hover:bg-secondary/30 transition-colors border-b border-gray-200 last:border-b-0">
                     <td className="p-4 font-body text-sm text-gray-700">
                       {enquiry.studentName || '-'}
@@ -479,6 +568,7 @@ export default function AdminAdmissionsPage() {
                       <div className="font-body text-xs text-gray-500">{enquiry.email || '-'}</div>
                     </td>
                     <td className="p-4 font-body text-sm text-gray-700 capitalize">{enquiry.category}</td>
+                    <td className="p-4 font-body text-sm text-gray-700 capitalize">{enquiry.source}</td>
                     <td className="p-4 font-body text-sm text-gray-700 max-w-xs truncate">
                       {enquiry.message || '-'}
                     </td>
@@ -553,23 +643,24 @@ export default function AdminAdmissionsPage() {
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              className="font-body px-6 py-2 border-2 border-gray-300 text-gray-700 hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="font-body px-4 sm:px-6 py-2 border-2 border-gray-300 text-gray-700 hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-lg text-sm sm:text-base"
             >
               Prev
             </button>
-            <span className="font-body text-gray-600">
+            <span className="font-body text-gray-600 text-sm sm:text-base">
               Page {currentPage} of {totalPages}
             </span>
             <button
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
-              className="font-body px-6 py-2 border-2 border-gray-300 text-gray-700 hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="font-body px-4 sm:px-6 py-2 border-2 border-gray-300 text-gray-700 hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-lg text-sm sm:text-base"
             >
               Next
             </button>
           </div>
         )}
       </div>
+
 
       {/* Remarks Modal */}
       {showRemarksModal && (

@@ -12,9 +12,15 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
-    const status = searchParams.get("status") || "published";
+    const status = searchParams.get("status");
 
-    const filter: any = { status };
+    const filter: any = {};
+    
+    // Only filter by status if it's not "all"
+    if (status && status !== "all") {
+      filter.status = status;
+    }
+    
     if (type === "news" || type === "event") {
       filter.type = type;
     }

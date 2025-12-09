@@ -28,6 +28,10 @@ export default function AdminNewsEventsPage() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Filter states
+  const [filterType, setFilterType] = useState<string>('all')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+
   const [formData, setFormData] = useState({
     type: 'news' as 'news' | 'event',
     title: '',
@@ -56,7 +60,7 @@ export default function AdminNewsEventsPage() {
   const fetchItems = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch('/api/news-events')
+      const response = await fetch('/api/news-events?status=all')
       const data = await response.json()
 
       if (data.success) {
@@ -68,6 +72,26 @@ export default function AdminNewsEventsPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Filter items based on type and status
+  const filteredItems = items.filter(item => {
+    // Type filter
+    if (filterType !== 'all' && item.type !== filterType) {
+      return false
+    }
+
+    // Status filter
+    if (filterStatus !== 'all' && item.status !== filterStatus) {
+      return false
+    }
+
+    return true
+  })
+
+  const handleResetFilters = () => {
+    setFilterType('all')
+    setFilterStatus('all')
   }
 
   // Parse time string like "7:30 PM" into components
@@ -242,6 +266,61 @@ export default function AdminNewsEventsPage() {
           </button>
         </header>
 
+        {/* Filters Section */}
+        <div className="mb-6 sm:mb-8 bg-gray-50 p-4 sm:p-6 rounded-lg">
+          <h2 className="font-display text-lg sm:text-xl font-semibold text-primary mb-4">
+            Filter Items
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Type Filter */}
+            <div>
+              <label className="block font-body text-sm font-medium text-gray-700 mb-2">
+                Type
+              </label>
+              <select
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+              >
+                <option value="all">All Types</option>
+                <option value="news">News</option>
+                <option value="event">Event</option>
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div>
+              <label className="block font-body text-sm font-medium text-gray-700 mb-2">
+                Status
+              </label>
+              <select
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                <option value="all">All Status</option>
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+
+            {/* Reset Button */}
+            <div className="flex items-end">
+              <button
+                onClick={handleResetFilters}
+                className="w-full font-body text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3 border-2 border-gray-300 text-gray-700 hover:border-primary hover:text-primary transition-all duration-300 rounded-lg"
+              >
+                Reset Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Results Count */}
+          <div className="mt-4 font-body text-sm text-gray-600">
+            Showing {filteredItems.length} of {items.length} items
+          </div>
+        </div>
+
         {/* Loading State */}
         {isLoading ? (
           <div className="text-center py-12">
@@ -251,13 +330,15 @@ export default function AdminNewsEventsPage() {
         ) : (
           <div className="space-y-4 sm:space-y-6">
             {/* Empty State */}
-            {items.length === 0 ? (
+            {filteredItems.length === 0 ? (
               <div className="text-center py-12 bg-gray-50 rounded-lg">
-                <p className="text-lg sm:text-xl text-gray-600">No items found. Create your first one!</p>
+                <p className="text-lg sm:text-xl text-gray-600">
+                  {items.length === 0 ? 'No items found. Create your first one!' : 'No items match your filters.'}
+                </p>
               </div>
             ) : (
               /* Items List */
-              items.map((item) => (
+              filteredItems.map((item) => (
                 <div
                   key={item._id}
                   className="border border-gray-200 rounded-lg p-4 sm:p-6 hover:border-primary transition-colors duration-300"
@@ -321,7 +402,7 @@ export default function AdminNewsEventsPage() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal - Keep exactly as it was */}
       {showModal && (
         <div 
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto" 
