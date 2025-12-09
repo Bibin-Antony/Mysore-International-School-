@@ -3,20 +3,15 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import NewsEvent from "@/lib/models/NewsEvent";
-
-// Cloudinary v1 import
 import { v2 as cloudinary } from "cloudinary";
 
-// Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-//-----------------------------------------
-// GET - Fetch all news & events
-//-----------------------------------------
+// GET all news/events
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
@@ -45,9 +40,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-//-----------------------------------------
-// POST - Create news/event
-//-----------------------------------------
+// POST create news/event
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
@@ -59,16 +52,23 @@ export async function POST(request: NextRequest) {
     const excerpt = formData.get("excerpt") as string;
     const fullContent = formData.get("fullContent") as string;
     const date = formData.get("date") as string;
-    const rawTime = formData.get('time')
-const rawLocation = formData.get('location')
 
-const time = rawTime ? String(rawTime) : undefined
-const location = rawLocation ? String(rawLocation) : undefined
+    const rawTime = formData.get("time");
+    const rawLocation = formData.get("location");
+
+    const time =
+      rawTime && rawTime !== "null" && rawTime !== ""
+        ? String(rawTime)
+        : undefined;
+
+    const location =
+      rawLocation && rawLocation !== "null" && rawLocation !== ""
+        ? String(rawLocation)
+        : undefined;
 
     const status = formData.get("status") as string;
     const image = formData.get("image") as File;
 
-    // Validate inputs
     if (!type || !title || !excerpt || !fullContent || !date || !image) {
       return NextResponse.json(
         { success: false, message: "Missing required fields" },
@@ -76,11 +76,8 @@ const location = rawLocation ? String(rawLocation) : undefined
       );
     }
 
-    // Convert image to Buffer
-    const arrayBuffer = await image.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(await image.arrayBuffer());
 
-    // Upload to Cloudinary v1
     const uploadResult: any = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         { folder: "mis/news-events" },
@@ -91,7 +88,6 @@ const location = rawLocation ? String(rawLocation) : undefined
       ).end(buffer);
     });
 
-    // Save to DB
     const newItem = await NewsEvent.create({
       type,
       title,
@@ -99,8 +95,8 @@ const location = rawLocation ? String(rawLocation) : undefined
       fullContent,
       imageUrl: uploadResult.secure_url,
       date: new Date(date),
-      time: time || undefined,
-      location: location || undefined,
+      time,
+      location,
       status: status || "published",
     });
 
