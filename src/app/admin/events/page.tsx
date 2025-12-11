@@ -17,6 +17,9 @@ export default function AdminEventGalleryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [events, setEvents] = useState<IEvent[]>([])
   
+  // Filter state
+  const [filterCategory, setFilterCategory] = useState<string>('all')
+  
   const [formData, setFormData] = useState({
     title: '',
     date: '',
@@ -31,7 +34,7 @@ export default function AdminEventGalleryPage() {
     { label: 'Dashboard', ariaLabel: 'Go to dashboard', link: '/admin/dashboard' },
     { label: 'Admissions', ariaLabel: 'Manage admissions', link: '/admin/admissions' },
     { label: 'Event Gallery', ariaLabel: 'Manage events and gallery', link: '/admin/events' },
-    { label: 'News & Events', ariaLabel: 'Manage news and events', link: '/admin/news-events' } // CHANGED HERE
+    { label: 'News & Events', ariaLabel: 'Manage news and events', link: '/admin/news-events' }
   ]
 
   const categories: EventCategory[] = ['Cultural', 'Sports', 'Academic', 'National', 'Festival', 'Competition']
@@ -57,6 +60,18 @@ export default function AdminEventGalleryPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Filter events based on category only
+  const filteredEvents = events.filter(event => {
+    if (filterCategory !== 'all' && event.category !== filterCategory) {
+      return false
+    }
+    return true
+  })
+
+  const handleResetFilters = () => {
+    setFilterCategory('all')
   }
 
   const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -237,7 +252,7 @@ export default function AdminEventGalleryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white pb-12 md:pb-0">
       <StaggeredMenu
         position="right"
         items={menuItems}
@@ -253,43 +268,83 @@ export default function AdminEventGalleryPage() {
         showLogout={true}
       />
 
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
-        <header className="mb-12 mt-25">
-          <h1 className="font-display text-5xl md:text-6xl font-bold text-primary mb-4 tracking-tight">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl">
+        <header className="mb-8 sm:mb-12 mt-16 sm:mt-20">
+          <h1 className="font-display text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-primary mb-3 sm:mb-4 tracking-tight">
             Event Gallery Management
           </h1>
-          <p className="font-body text-xl text-gray-600 mb-8">
+          <p className="font-body text-base sm:text-lg md:text-xl text-gray-600 mb-6 sm:mb-8">
             Create and manage school event galleries
           </p>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="font-body font-semibold text-white bg-primary px-8 py-4 hover:bg-[#6B0F6B] transition-colors duration-300 rounded-lg"
+            className="w-full sm:w-auto font-body font-semibold text-white bg-primary px-6 sm:px-8 py-3 sm:py-4 hover:bg-[#6B0F6B] transition-colors duration-300 rounded-lg"
           >
             Create New Event
           </button>
         </header>
 
-        {isLoading && (
+        {/* Filters Section */}
+        <div className="mb-6 sm:mb-8 bg-gray-50 p-4 sm:p-6 rounded-lg">
+          <h2 className="font-display text-lg sm:text-xl font-semibold text-primary mb-4">
+            Filter Events
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Category Filter */}
+            <div>
+              <label className="block font-body text-sm font-medium text-gray-700 mb-2">
+                Category
+              </label>
+              <select
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+              >
+                <option value="all">All Categories</option>
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reset Button */}
+            <div className="flex items-end">
+              <button
+                onClick={handleResetFilters}
+                className="w-full font-body text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3 border-2 border-gray-300 text-gray-700 hover:border-primary hover:text-primary transition-all duration-300 rounded-lg"
+              >
+                Reset Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Results Count */}
+          <div className="mt-4 font-body text-sm text-gray-600">
+            Showing {filteredEvents.length} of {events.length} events
+          </div>
+        </div>
+
+        {isLoading ? (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
             <p className="mt-4 text-gray-600">Loading events...</p>
           </div>
-        )}
-
-        {!isLoading && (
+        ) : (
           <section>
-            {events.length === 0 ? (
+            {filteredEvents.length === 0 ? (
               <div className="text-center py-12 bg-gray-50 rounded-lg">
-                <p className="text-xl text-gray-600">No events found. Create your first event!</p>
+                <p className="text-lg sm:text-xl text-gray-600">
+                  {events.length === 0 ? 'No events found. Create your first event!' : 'No events match your filters.'}
+                </p>
               </div>
             ) : (
-              <div className="space-y-8">
-                {events.map((event) => (
+              <div className="space-y-6 sm:space-y-8">
+                {filteredEvents.map((event) => (
                   <div 
                     key={event._id}
-                    className="border border-gray-200 rounded-lg p-6 hover:border-primary transition-colors duration-300"
+                    className="border border-gray-200 rounded-lg p-4 sm:p-6 hover:border-primary transition-colors duration-300"
                   >
-                    <div className="flex flex-col lg:flex-row gap-6">
+                    <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
                       {/* Thumbnail */}
                       <div className="lg:w-1/3">
                         <div 
@@ -303,7 +358,7 @@ export default function AdminEventGalleryPage() {
                             className="object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-center justify-center">
-                            <span className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-4xl">
+                            <span className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-2xl sm:text-4xl">
                               🔍
                             </span>
                           </div>
@@ -312,31 +367,31 @@ export default function AdminEventGalleryPage() {
 
                       {/* Event Details */}
                       <div className="flex-1">
-                        <div className="flex items-center gap-4 mb-3">
-                          <span className="font-body text-sm font-semibold text-primary uppercase tracking-widest">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-2 sm:mb-3">
+                          <span className="font-body text-xs sm:text-sm font-semibold text-primary uppercase tracking-widest px-2 sm:px-3 py-1 bg-purple-100 rounded-full">
                             {event.category}
                           </span>
-                          <span className="font-body text-sm text-gray-500">
+                          <span className="font-body text-xs sm:text-sm text-gray-500">
                             {event.photoCount} Photos
                           </span>
                         </div>
-                        <div className="font-body text-sm text-gray-500 mb-2">
+                        <div className="font-body text-xs sm:text-sm text-gray-500 mb-2">
                           {new Date(event.date).toLocaleDateString('en-US', { 
                             year: 'numeric', 
                             month: 'long', 
                             day: 'numeric' 
                           })}
                         </div>
-                        <h3 className="font-display text-2xl font-semibold text-primary mb-2">
+                        <h3 className="font-display text-xl sm:text-2xl font-semibold text-primary mb-2">
                           {event.title}
                         </h3>
-                        <p className="font-body text-gray-600 mb-4">
+                        <p className="font-body text-sm sm:text-base text-gray-600 mb-3 sm:mb-4">
                           {event.description}
                         </p>
 
                         {/* Gallery Images Preview */}
-                        <div className="mb-4">
-                          <p className="font-body text-sm font-semibold text-gray-700 mb-2">
+                        <div className="mb-3 sm:mb-4">
+                          <p className="font-body text-xs sm:text-sm font-semibold text-gray-700 mb-2">
                             Gallery Images:
                           </p>
                           <div className="grid grid-cols-4 gap-2">
@@ -357,7 +412,7 @@ export default function AdminEventGalleryPage() {
                             ))}
                             {event.galleryImages.length > 8 && (
                               <div className="relative aspect-square rounded overflow-hidden bg-gray-100 flex items-center justify-center">
-                                <span className="font-body text-sm text-gray-600">
+                                <span className="font-body text-xs sm:text-sm text-gray-600">
                                   +{event.galleryImages.length - 8}
                                 </span>
                               </div>
@@ -369,22 +424,22 @@ export default function AdminEventGalleryPage() {
                           href={event.driveLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="font-body text-sm text-primary hover:text-[#6B0F6B] transition-colors inline-block"
+                          className="font-body text-xs sm:text-sm text-primary hover:text-[#6B0F6B] transition-colors inline-block mb-3 sm:mb-4"
                         >
                           View Full Album on Google Drive →
                         </a>
 
                         {/* Action Buttons */}
-                        <div className="flex gap-3 mt-4">
+                        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                           <button 
                             onClick={() => handleEditClick(event)}
-                            className="font-body px-6 py-2 border-2 border-primary text-primary hover:bg-primary hover:text-white transition-all duration-300 rounded-lg"
+                            className="w-full sm:w-auto font-body text-sm sm:text-base px-4 sm:px-6 py-2 border-2 border-primary text-primary hover:bg-primary hover:text-white transition-all duration-300 rounded-lg"
                           >
                             Edit
                           </button>
                           <button 
                             onClick={() => handleDelete(event._id)}
-                            className="font-body px-6 py-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition-all duration-300 rounded-lg"
+                            className="w-full sm:w-auto font-body text-sm sm:text-base px-4 sm:px-6 py-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition-all duration-300 rounded-lg"
                           >
                             Delete
                           </button>

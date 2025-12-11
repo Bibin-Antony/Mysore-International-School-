@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import StaggeredMenu from '@/components/StaggeredMenu'
 
-// Define the interface WITHOUT importing from model
 interface INewsEvent {
   _id: string
   type: 'news' | 'event'
@@ -29,13 +28,19 @@ export default function AdminNewsEventsPage() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Filter states
+  const [filterType, setFilterType] = useState<string>('all')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+
   const [formData, setFormData] = useState({
     type: 'news' as 'news' | 'event',
     title: '',
     excerpt: '',
     fullContent: '',
     date: '',
-    time: '',
+    timeHour: '',
+    timeMinute: '',
+    timePeriod: 'AM' as 'AM' | 'PM',
     location: '',
     status: 'published' as 'draft' | 'published',
     image: null as File | null
@@ -55,7 +60,7 @@ export default function AdminNewsEventsPage() {
   const fetchItems = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch('/api/news-events')
+      const response = await fetch('/api/news-events?status=all')
       const data = await response.json()
 
       if (data.success) {
@@ -69,6 +74,48 @@ export default function AdminNewsEventsPage() {
     }
   }
 
+  // Filter items based on type and status
+  const filteredItems = items.filter(item => {
+    // Type filter
+    if (filterType !== 'all' && item.type !== filterType) {
+      return false
+    }
+
+    // Status filter
+    if (filterStatus !== 'all' && item.status !== filterStatus) {
+      return false
+    }
+
+    return true
+  })
+
+  const handleResetFilters = () => {
+    setFilterType('all')
+    setFilterStatus('all')
+  }
+
+  // Parse time string like "7:30 PM" into components
+  const parseTime = (timeString?: string) => {
+    if (!timeString) return { hour: '', minute: '', period: 'AM' as 'AM' | 'PM' }
+    
+    const match = timeString.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+    if (match) {
+      return {
+        hour: match[1],
+        minute: match[2],
+        period: match[3].toUpperCase() as 'AM' | 'PM'
+      }
+    }
+    return { hour: '', minute: '', period: 'AM' as 'AM' | 'PM' }
+  }
+
+  // Format time components into string like "7:30 PM"
+  const formatTime = (hour: string, minute: string, period: 'AM' | 'PM') => {
+    if (!hour) return ''
+    const min = minute || '00'
+    return `${hour}:${min} ${period}`
+  }
+
   const handleCreateClick = () => {
     setFormMode('create')
     setFormData({
@@ -77,7 +124,9 @@ export default function AdminNewsEventsPage() {
       excerpt: '',
       fullContent: '',
       date: '',
-      time: '',
+      timeHour: '',
+      timeMinute: '',
+      timePeriod: 'AM',
       location: '',
       status: 'published',
       image: null
@@ -86,6 +135,8 @@ export default function AdminNewsEventsPage() {
   }
 
   const handleEditClick = (item: INewsEvent) => {
+    const { hour, minute, period } = parseTime(item.time)
+    
     setFormMode('edit')
     setEditingItemId(item._id.toString())
     setFormData({
@@ -94,7 +145,9 @@ export default function AdminNewsEventsPage() {
       excerpt: item.excerpt,
       fullContent: item.fullContent,
       date: new Date(item.date).toISOString().split('T')[0],
-      time: item.time || '',
+      timeHour: hour,
+      timeMinute: minute,
+      timePeriod: period,
       location: item.location || '',
       status: item.status,
       image: null
@@ -119,7 +172,11 @@ export default function AdminNewsEventsPage() {
       form.append('excerpt', formData.excerpt)
       form.append('fullContent', formData.fullContent)
       form.append('date', formData.date)
-      form.append('time', formData.time)
+      
+      // Format time before sending
+      const formattedTime = formatTime(formData.timeHour, formData.timeMinute, formData.timePeriod)
+      form.append('time', formattedTime)
+      
       form.append('location', formData.location)
       form.append('status', formData.status)
       
@@ -209,6 +266,61 @@ export default function AdminNewsEventsPage() {
           </button>
         </header>
 
+        {/* Filters Section */}
+        <div className="mb-6 sm:mb-8 bg-gray-50 p-4 sm:p-6 rounded-lg">
+          <h2 className="font-display text-lg sm:text-xl font-semibold text-primary mb-4">
+            Filter Items
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Type Filter */}
+            <div>
+              <label className="block font-body text-sm font-medium text-gray-700 mb-2">
+                Type
+              </label>
+              <select
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+              >
+                <option value="all">All Types</option>
+                <option value="news">News</option>
+                <option value="event">Event</option>
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div>
+              <label className="block font-body text-sm font-medium text-gray-700 mb-2">
+                Status
+              </label>
+              <select
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                <option value="all">All Status</option>
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+
+            {/* Reset Button */}
+            <div className="flex items-end">
+              <button
+                onClick={handleResetFilters}
+                className="w-full font-body text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3 border-2 border-gray-300 text-gray-700 hover:border-primary hover:text-primary transition-all duration-300 rounded-lg"
+              >
+                Reset Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Results Count */}
+          <div className="mt-4 font-body text-sm text-gray-600">
+            Showing {filteredItems.length} of {items.length} items
+          </div>
+        </div>
+
         {/* Loading State */}
         {isLoading ? (
           <div className="text-center py-12">
@@ -218,18 +330,19 @@ export default function AdminNewsEventsPage() {
         ) : (
           <div className="space-y-4 sm:space-y-6">
             {/* Empty State */}
-            {items.length === 0 ? (
+            {filteredItems.length === 0 ? (
               <div className="text-center py-12 bg-gray-50 rounded-lg">
-                <p className="text-lg sm:text-xl text-gray-600">No items found. Create your first one!</p>
+                <p className="text-lg sm:text-xl text-gray-600">
+                  {items.length === 0 ? 'No items found. Create your first one!' : 'No items match your filters.'}
+                </p>
               </div>
             ) : (
               /* Items List */
-              items.map((item) => (
+              filteredItems.map((item) => (
                 <div
                   key={item._id}
                   className="border border-gray-200 rounded-lg p-4 sm:p-6 hover:border-primary transition-colors duration-300"
                 >
-                  {/* Mobile Layout */}
                   <div className="block">
                     {/* Badges */}
                     <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-3">
@@ -289,7 +402,7 @@ export default function AdminNewsEventsPage() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal - Keep exactly as it was */}
       {showModal && (
         <div 
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto" 
@@ -389,14 +502,47 @@ export default function AdminNewsEventsPage() {
                       <label className="block font-body text-sm font-medium text-gray-700 mb-2">
                         Time
                       </label>
-                      <input
-                        type="text"
-                        placeholder="e.g., 7:00 PM"
-                        className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
-                        value={formData.time}
-                        onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-                        disabled={isSubmitting}
-                      />
+                      <div className="grid grid-cols-7 gap-2">
+                        {/* Hour */}
+                        <input
+                          type="number"
+                          min="1"
+                          max="12"
+                          placeholder="HH"
+                          className="col-span-2 px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base text-center"
+                          value={formData.timeHour}
+                          onChange={(e) => setFormData({ ...formData, timeHour: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                        <span className="col-span-1 flex items-center justify-center text-gray-600 text-lg">:</span>
+                        {/* Minute */}
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          placeholder="MM"
+                          className="col-span-2 px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base text-center"
+                          value={formData.timeMinute}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            if (val.length <= 2) {
+                              setFormData({ ...formData, timeMinute: val.padStart(2, '0') })
+                            }
+                          }}
+                          disabled={isSubmitting}
+                        />
+                        {/* AM/PM */}
+                        <select
+                          className="col-span-2 px-2 sm:px-3 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm sm:text-base"
+                          value={formData.timePeriod}
+                          onChange={(e) => setFormData({ ...formData, timePeriod: e.target.value as 'AM' | 'PM' })}
+                          disabled={isSubmitting}
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">Example: 7:30 PM</p>
                     </div>
 
                     <div>
